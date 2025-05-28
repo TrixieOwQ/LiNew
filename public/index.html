@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Design Services</title>
+    <link rel="stylesheet" href="css/tailwind-lite.css">
+    <script src="lib/three.min.js"></script>
+    <style>
+        @font-face {font-family:'Font Awesome 6 Free';src:url('fonts/fa-solid-900.ttf') format('truetype');font-weight:900;font-style:normal;}
+        .fas{font-family:'Font Awesome 6 Free';font-weight:900;display:inline-block;font-style:normal;}
+        .fa-globe:before{content:"\f0ac";}.fa-paint-brush:before{content:"\f1fc";}.fa-mobile-alt:before{content:"\f3cd";}
+        .fa-cloud-upload-alt:before{content:"\f382";}.fa-paper-plane:before{content:"\f1d8";}.fa-envelope:before{content:"\f0e0";}.fa-spinner:before{content:"\f110";}
+        @font-face{font-family:'Roboto Mono';src:url('fonts/VT323-Regular.woff') format('truetype');font-weight:400,500;}
+        @font-face{font-family:'Roboto Mono';src:url('fonts/InterTight-BoldItali.woff') format('truetype');font-weight:700;}
+        :root{--dark:#0a0a0a;--darker:#050505;--accent:#ff2d75;--text:#e2e2e2;}
+        body{font-family:'Roboto Mono',monospace;background-color:var(--dark);color:var(--text);}
+        #bg-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:-1;opacity:0.5;}
+        .terminal-style{background-color:var(--darker);border:1px solid #333;box-shadow:0 0 15px rgba(0,0,0,0.5);}
+        .accent-text{color:var(--accent);}
+        .glitch{position:relative;}
+        .glitch::before,.glitch::after{content:attr(data-text);position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.8;}
+        .glitch::before{color:#0ff;z-index:-1;animation:glitch-effect 3s infinite;}
+        .glitch::after{color:#f0f;z-index:-2;animation:glitch-effect 2s infinite reverse;}
+        @keyframes glitch-effect{0%,100%{transform:translate(0)}20%{transform:translate(-3px,3px)}40%{transform:translate(-3px,-3px)}60%{transform:translate(3px,3px)}80%{transform:translate(3px,-3px)}}
+        .scanlines::before{content:"";position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(transparent 0%,rgba(255,255,255,0.05) 50%,transparent 100%);background-size:100% 4px;pointer-events:none;z-index:10;}
+        .service-card:hover{transform:translateY(-5px);box-shadow:0 10px 20px rgba(255,45,117,0.3);}
+        .file-upload{position:relative;overflow:hidden;display:inline-block;width:100%;}
+        .file-upload-input{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer;}
+        .file-upload-label{display:block;padding:8px 12px;background:var(--darker);border:1px dashed var(--accent);text-align:center;cursor:pointer;transition:all 0.3s;}
+        .file-upload-label:hover{background:rgba(255,45,117,0.1);}
+        .portfolio-item:hover{transform:scale(1.02);box-shadow:0 0 20px rgba(255,45,117,0.3);}
+        .portfolio-overlay{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.8);padding:10px;transform:translateY(100%);transition:transform 0.3s ease;}
+        .portfolio-item:hover .portfolio-overlay{transform:translateY(0);}
+        .nav-button:hover{color:var(--accent);}
+        .section{display:none;animation:fadeIn 0.5s ease-in-out;}
+        .section.active{display:block;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+        .loading{display:none;}
+        .loading.active{display:inline-block;animation:spin 1s linear infinite;}
+        @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+        .status-message{display:none;padding:8px;margin-top:10px;border-radius:4px;text-align:center;}
+        .status-message.success{display:block;background-color:rgba(0,255,0,0.1);border:1px solid rgba(0,255,0,0.3);}
+        .status-message.error{display:block;background-color:rgba(255,0,0,0.1);border:1px solid rgba(255,0,0,0.3);}
+        
+        /* Success animation */
+        @keyframes successPulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+          100% { transform: scale(1); }
+        }
+        .success-animation {
+          animation: successPulse 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-black text-gray-300">
+    <canvas id="bg-canvas"></canvas>
+    <div class="container mx-auto px-2 py-4 max-w-5xl">
+        <header class="mb-6 text-center">
+            <h1 class="text-4xl font-bold mb-2 accent-text glitch" data-text="VIRTUAL LILIVINE">VIRTUAL LILIVINE</h1>
+            <p class="text-xs">PROFESSIONAL WEBSITE DEVELOPMENT</p>
+        </header>
+        <div class="flex justify-center space-x-6 mb-8">
+            <div class="nav-button terminal-style px-4 py-2" data-section="home">HOME</div>
+            <div class="nav-button terminal-style px-4 py-2" data-section="portfolio">PORTFOLIO</div>
+            <div class="nav-button terminal-style px-4 py-2" data-section="order">ORDER</div>
+        </div>
+        <section id="home-section" class="section active">
+            <div class="terminal-style p-4 scanlines mb-6">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs">[WEB_DESIGN]</span>
+                    <span class="text-xs accent-text">STATUS: AVAILABLE</span>
+                </div>
+                <div class="flex flex-col md:flex-row gap-4 items-center">
+                    <div class="flex-1">
+                        <h2 class="text-xl mb-2 accent-text">// WEB DEVELOPMENT SERVICES</h2>
+                        <p class="text-sm mb-4">We create functional and modern websites for businesses and individuals.</p>
+                    </div>
+                    <div class="flex justify-center">
+                        <img src="succubus.svg" alt="Design Icon" class="w-48 h-48 object-contain pixel-perfect">
+                    </div>
+                </div>
+            </div>
+            <div class="terminal-style p-4 mb-6">
+                <h2 class="text-xl mb-4 accent-text">// SERVICES</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="service-card terminal-style p-4 transition-all">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-globe mr-2 accent-text"></i>
+                            <h3 class="font-bold">WEBSITE DESIGN</h3>
+                        </div>
+                        <p class="text-xs">Responsive websites that work on all devices.</p>
+                    </div>
+                    <div class="service-card terminal-style p-4 transition-all">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-paint-brush mr-2 accent-text"></i>
+                            <h3 class="font-bold">BRANDING</h3>
+                        </div>
+                        <p class="text-xs">Logo design and visual identity.</p>
+                    </div>
+                    <div class="service-card terminal-style p-4 transition-all">
+                        <div class="flex items-center mb-2">
+                            <i class="fas fa-mobile-alt mr-2 accent-text"></i>
+                            <h3 class="font-bold">UI/UX DESIGN</h3>
+                        </div>
+                        <p class="text-xs">User-friendly interfaces and experiences.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section id="portfolio-section" class="section">
+            <div class="terminal-style p-4 mb-6">
+                <h2 class="text-xl mb-4 accent-text">// PORTFOLIO</h2>
+                <p class="text-sm mb-4">Examples of our recent projects. Hover for details.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="portfolio-item h-48 relative overflow-hidden transition-all">
+                        <img src="assets/images/portfolio1.jpg" alt="Website Design" class="w-full h-full object-cover">
+                        <div class="portfolio-overlay">
+                            <h3 class="accent-text">NEON CORP</h3>
+                            <p class="text-xxs">Corporate website with modern aesthetic</p>
+                        </div>
+                    </div>
+                    <div class="portfolio-item h-48 relative overflow-hidden transition-all">
+                        <img src="assets/images/portfolio2.jpg" alt="Landing Page" class="w-full h-full object-cover">
+                        <div class="portfolio-overlay">
+                            <h3 class="accent-text">VOID TECH</h3>
+                            <p class="text-xxs">High-conversion landing page</p>
+                        </div>
+                    </div>
+                    <div class="portfolio-item h-48 relative overflow-hidden transition-all">
+                        <img src="assets/images/portfolio3.jpg" alt="Brand Identity" class="w-full h-full object-cover">
+                        <div class="portfolio-overlay">
+                            <h3 class="accent-text">SYNTH CLUB</h3>
+                            <p class="text-xxs">Nightclub brand identity</p>
+                        </div>
+                    </div>
+                    <div class="portfolio-item h-48 relative overflow-hidden transition-all">
+                        <img src="assets/images/portfolio4.jpg" alt="UI Design" class="w-full h-full object-cover">
+                        <div class="portfolio-overlay">
+                            <h3 class="accent-text">CYBER DASH</h3>
+                            <p class="text-xxs">Dashboard UI for analytics</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section id="order-section" class="section">
+            <div class="terminal-style p-4 mb-6">
+                <h2 class="text-xl mb-4 accent-text">// ORDER FORM</h2>
+                <div class="terminal-style p-4" id="order-form">
+                    <div class="flex justify-between items-center mb-3">
+                        <h2 class="text-sm font-bold accent-text">// REQUEST A QUOTE</h2>
+                        <span class="text-xxs">ALL FIELDS REQUIRED</span>
+                    </div>
+                    <form id="main-form" enctype="multipart/form-data">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div>
+                                <label class="block text-xxs mb-1">YOUR NAME</label>
+                                <input type="text" name="name" class="w-full bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent" required>
+                            </div>
+                            <div>
+                                <label class="block text-xxs mb-1">EMAIL</label>
+                                <input type="email" name="email" class="w-full bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent" required>
+                            </div>
+                            <div>
+                                <label class="block text-xxs mb-1">CONTACT INFO (Telegram/Viber/etc.)</label>
+                                <input type="text" name="contact_info" class="w-full bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent" placeholder="telegram: @username or viber: +123456789">
+                            </div>
+                            <div>
+                                <label class="block text-xxs mb-1">PROJECT TYPE</label>
+                                <select class="w-full bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent" id="project-type" name="project_type" required>
+                                    <option value="">SELECT</option>
+                                    <option>Other</option>
+                                    <option>Website</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xxs mb-1">YOUR BUDGET</label>
+                                <div class="flex items-center">
+                                    <span class="text-xs mr-2">$</span>
+                                    <input type="number" name="price" class="flex-1 bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent" id="user-price" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-xxs mb-1">PROJECT DETAILS</label>
+                            <textarea class="w-full bg-black text-gray-300 px-3 py-2 text-xs border border-gray-800 focus:outline-none focus:border-accent h-24" name="details" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="block text-xxs mb-1">UPLOAD REFERENCE IMAGES (OPTIONAL)</label>
+                            <div class="file-upload">
+                                <label class="file-upload-label">
+                                    <i class="fas fa-cloud-upload-alt mr-2 accent-text"></i>
+                                    CHOOSE FILES
+                                    <input type="file" class="file-upload-input" id="file-input" name="reference_files[]" multiple>
+                                </label>
+                            </div>
+                            <div id="file-names" class="text-xxs mt-1"></div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="px-4 py-2 bg-black text-xs border border-gray-800 hover:border-accent hover:text-accent flex items-center" id="submit-btn">
+                                <i class="fas fa-paper-plane mr-2 accent-text"></i> 
+                                <span id="submit-text">SUBMIT REQUEST</span>
+                                <i class="fas fa-spinner loading ml-2" id="spinner"></i>
+                            </button>
+                        </div>
+                        <div id="status-message" class="status-message"></div>
+                    </form>
+                </div>
+            </div>
+            <div class="terminal-style p-4">
+                <h3 class="text-sm mb-2 accent-text">CONTACT</h3>
+                <div class="flex items-center">
+                    <i class="fas fa-envelope mr-2 accent-text"></i>
+                    <span class="text-xs">lilivine666@gmail.com</span>
+                </div>
+            </div>
+        </section>
+        <footer class="mt-6 text-center text-xxs text-gray-600">
+            <p>DIGITAL DESIGN STUDIO © 2023 | PROFESSIONAL WEB SERVICES</p>
+        </footer>
+    </div>
+    <script>
+        // 3D Background
+        const bgCanvas = document.getElementById('bg-canvas');
+        const bgScene = new THREE.Scene();
+        const bgCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const bgRenderer = new THREE.WebGLRenderer({ canvas: bgCanvas, alpha: true });
+        bgRenderer.setSize(window.innerWidth, window.innerHeight);
+        const bgGeometry = new THREE.TorusKnotGeometry(10, 3, 100, 16);
+        const bgMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xff2d75,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.3
+        });
+        const bgTorusKnot = new THREE.Mesh(bgGeometry, bgMaterial);
+        bgScene.add(bgTorusKnot);
+        bgCamera.position.z = 30;
+
+        function animateBackground() {
+            requestAnimationFrame(animateBackground);
+            bgTorusKnot.rotation.x += 0.001;
+            bgTorusKnot.rotation.y += 0.002;
+            bgRenderer.render(bgScene, bgCamera);
+        }
+        animateBackground();
+
+        window.addEventListener('resize', () => {
+            bgCamera.aspect = window.innerWidth / window.innerHeight;
+            bgCamera.updateProjectionMatrix();
+            bgRenderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Navigation
+        document.querySelectorAll('.nav-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const sectionId = button.getAttribute('data-section');
+                document.querySelectorAll('.section').forEach(section => {
+                    section.classList.remove('active');
+                });
+                document.getElementById(`${sectionId}-section`).classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+
+        // Show selected file names
+        document.getElementById('file-input').addEventListener('change', function() {
+            const fileNamesContainer = document.getElementById('file-names');
+            const files = this.files;
+            if (files.length > 0) {
+                let names = '';
+                for (let i = 0; i < files.length; i++) {
+                    names += files[i].name;
+                    if (i < files.length - 1) names += ', ';
+                }
+                fileNamesContainer.textContent = 'Selected: ' + names;
+            } else {
+                fileNamesContainer.textContent = '';
+            }
+        });
+
+        // Form submission with error handling
+        document.getElementById('main-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const submitBtn = document.getElementById('submit-btn');
+            const spinner = document.getElementById('spinner');
+            const submitText = document.getElementById('submit-text');
+            const statusMessage = document.getElementById('status-message');
+            
+            submitBtn.disabled = true;
+            spinner.classList.add('active');
+            submitText.textContent = 'SENDING...';
+            
+            try {
+                const formData = new FormData(form);
+                
+                const response = await fetch('/telegram-webhook', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Network response was not ok');
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    statusMessage.textContent = result.message;
+                    statusMessage.className = 'status-message success';
+                    form.reset();
+                    document.getElementById('file-names').textContent = '';
+                    
+                    // Add success animation
+                    statusMessage.classList.add('success-animation');
+                    setTimeout(() => {
+                        statusMessage.classList.remove('success-animation');
+                    }, 500);
+                } else {
+                    throw new Error(result.message || 'Failed to send request');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                statusMessage.textContent = `❌ Error: ${error.message || 'Failed to send request. Please try again later.'}`;
+                statusMessage.className = 'status-message error';
+            } finally {
+                submitBtn.disabled = false;
+                spinner.classList.remove('active');
+                submitText.textContent = 'SUBMIT REQUEST';
+            }
+        });
+    </script>
+</body>
+</html>
