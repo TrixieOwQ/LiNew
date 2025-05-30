@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lilivine - 3D Visual Novel</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            perspective: 1000px;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            touch-action: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #world {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            will-change: transform;
+            opacity: 0;
+            backface-visibility: hidden;
+        }
+        
+       .sky {
+    position: absolute;
+    width: 20000px;
+    height: 20000px;
+    background: linear-gradient(to bottom, #1a1a2e, #16213e);
+    top: 50%;
+    left: 50%;
+    transform: translate3d(-50%, -50%, -700px); /* центр + отдаление назад */
+    backface-visibility: hidden;
+}
+
+        /* Все UI-элементы (окна) */
+        .dialog-container {
+            position: absolute;
+            width: 90%;
+            max-width: 320px;
+            left: 50%;
+            top: 50%;
+            transform: translate3d(-50%, -50%, 0);
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 15px;
+            transform-style: preserve-3d;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            opacity: 1;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            will-change: transform, opacity;
+            box-sizing: border-box;
+            backface-visibility: hidden;
+        }
+        
+        .dialog-text {
+            color: white;
+            font-size: 15px;
+            line-height: 1.4;
+            margin-bottom: 10px;
+            min-height: 40px;
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            max-height: 150px;
+        }
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        .btn {
+            background: rgba(100, 65, 165, 0.3);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+            transform-style: preserve-3d;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        .btn:hover {
+            background: rgba(100, 65, 165, 0.5);
+            transform: translateZ(10px);
+        }
+        .next-arrow {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            width: 35px;
+            height: 35px;
+            background: transparent;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transform-style: preserve-3d;
+            transition: all 0.3s ease;
+            border: none;
+            color: #aaa;
+            font-size: 20px;
+            font-weight: bold;
+            animation: pulse 1.5s infinite;
+            display: none;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; transform: translateX(0) }
+            50% { opacity: 1; transform: translateX(3px) }
+        }
+        .next-arrow:hover {
+            color: #fff;
+            transform: translateZ(10px);
+        }
+        .form-container {
+            position: absolute;
+            width: 90%;
+            max-width: 320px;
+            left: 50%;
+            top: 50%;
+            transform: translate3d(-50%, -50%, 100px);
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 15px;
+            display: none;
+            transform-style: preserve-3d;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.7);
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            will-change: transform, opacity;
+            box-sizing: border-box;
+            backface-visibility: hidden;
+        }
+        .form-title {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-label {
+            display: block;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 5px;
+            font-size: 13px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(100, 65, 165, 0.5);
+            border-radius: 5px;
+            color: white;
+            box-sizing: border-box;
+            font-size: 13px;
+            transition: all 0.3s ease;
+        }
+        .form-input:focus {
+            border-color: rgba(100, 65, 165, 0.8);
+            outline: none;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        .form-btn {
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 13px;
+        }
+        .form-btn.cancel {
+            background: rgba(255, 0, 0, 0.3);
+            color: white;
+            border: 1px solid rgba(255, 0, 0, 0.5);
+        }
+        .form-btn.submit {
+            background: rgba(76, 175, 80, 0.7);
+            color: white;
+            border: none;
+        }
+        .form-btn.submit:hover {
+            background: rgba(76, 175, 80, 0.9);
+        }
+        .form-btn:hover {
+            transform: translateZ(5px);
+        }
+        .success-container {
+            position: absolute;
+            width: 90%;
+            max-width: 320px;
+            left: 50%;
+            top: 50%;
+            transform: translate3d(-50%, -50%, 150px);
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid rgba(0, 255, 0, 0.3);
+            border-radius: 15px;
+            padding: 15px;
+            text-align: center;
+            display: none;
+            transform-style: preserve-3d;
+            box-shadow: 0 0 40px rgba(0, 255, 0, 0.2);
+            opacity: 0;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            will-change: transform, opacity;
+            box-sizing: border-box;
+            backface-visibility: hidden;
+        }
+        .success-icon {
+            color: #4CAF50;
+            font-size: 35px;
+            margin-bottom: 12px;
+        }
+        .success-title {
+            color: white;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .success-message {
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+        #loading-indicator {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+            text-align: center;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border-top-color: #6441a5;
+            animation: spin 1s linear infinite;
+            margin-bottom: 12px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg) }
+        }
+        .name-input-container {
+            display: none;
+            margin-top: 10px;
+            transform: translateZ(20px);
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px) }
+            to { opacity: 1; transform: translateY(0) }
+        }
+        .name-input {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(100, 65, 165, 0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 13px;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+        .name-input:focus {
+            border-color: rgba(100, 65, 165, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-indicator">
+        <div class="loading-spinner"></div>
+        <div>Loading scene...</div>
+    </div>
+    
+    <div id="world">
+        <!-- Только skybox и UI-элементы -->
+        <div class="sky"></div>
+        
+        <div class="dialog-container" id="dialog-container">
+            <div class="dialog-text" id="dialog-text"></div>
+            <div class="options-container" id="options-container"></div>
+            <div class="name-input-container" id="name-input-container">
+                <input type="text" class="name-input" id="name-input" placeholder="" maxlength="30">
+                <button class="btn" id="name-submit-btn"></button>
+            </div>
+            <button class="next-arrow" id="next-btn">></button>
+        </div>
+        
+        <div class="form-container" id="form-container">
+            <h2 class="form-title" id="form-title"></h2>
+            <div class="form-group">
+                <label class="form-label" id="contact-label"></label>
+                <input type="text" class="form-input" id="contact-input" required maxlength="50">
+            </div>
+            <div class="form-group">
+                <label class="form-label" id="budget-label"></label>
+                <input type="number" class="form-input" id="budget-input" required min="50" max="100000">
+            </div>
+            <div class="form-group">
+                <label class="form-label" id="details-label"></label>
+                <input type="text" class="form-input" id="details-input" required maxlength="100">
+            </div>
+            <div class="form-actions">
+                <button class="form-btn cancel" id="cancel-btn"></button>
+                <button class="form-btn submit" id="submit-btn"></button>
+            </div>
+        </div>
+        
+        <div class="success-container" id="success-container">
+            <div class="success-icon">✓</div>
+            <h2 class="success-title" id="success-title"></h2>
+            <p class="success-message" id="success-message"></p>
+            <button class="btn" id="success-btn"></button>
+        </div>
+    </div>
+
+    <script>
+        const languages = {
+            en: {
+                welcome: "Welcome to Lilivine.cc - Professional Web Development Studio",
+                about: "Contact: lilivine666@gmail.com\nWe specialize in:\n- Custom website development\n- Web applications\n- E-commerce solutions\n- UI/UX design",
+                nameQuestion: "Before we begin, how should I address you?",
+                namePlaceholder: "Your name", nameSubmit: "Continue",
+                greeting: (name) => `Greetings, ${name}!`,
+                orderQuestion: "Would you like to place an order?",
+                yesOption: "Yes, let's order", noOption: "Not now",
+                formTitle: "Order Details",
+                contactLabel: "Contact (Telegram/WhatsApp/Email)",
+                budgetLabel: "Budget (in USD)",
+                detailsLabel: "What exactly do you need? (max 100 chars)",
+                detailsPlaceholder: "Describe your project...",
+                cancelBtn: "Cancel", submitBtn: "Submit Order",
+                successTitle: "Order Successful!",
+                successMessage: (name, contact) => `Thank you ${name}, we'll contact you soon at ${contact} about your project!`,
+                successBtn: "Return", loading: "Loading scene..."
+            },
+            ru: {
+                welcome: "Добро пожаловать на Lilivine.cc - Студия веб-разработки",
+                about: "Контакты: lilivine666@gmail.com\nМы специализируемся на:\n- Создании сайтов под ключ\n- Веб-приложениях\n- Интернет-магазинах\n- UI/UX дизайне",
+                nameQuestion: "Как мне к вам обращаться?",
+                namePlaceholder: "Ваше имя", nameSubmit: "Продолжить",
+                greeting: (name) => `Приветствую, ${name}!`,
+                orderQuestion: "Хотите оформить заказ?",
+                yesOption: "Да, оформить заказ", noOption: "Не сейчас",
+                formTitle: "Детали заказа",
+                contactLabel: "Контакт (Telegram/WhatsApp/Email)",
+                budgetLabel: "Бюджет (в USD)",
+                detailsLabel: "Что именно вам нужно? (макс 100 симв)",
+                detailsPlaceholder: "Опишите ваш проект...",
+                cancelBtn: "Отмена", submitBtn: "Отправить заказ",
+                successTitle: "Заказ оформлен!",
+                successMessage: (name, contact) => `Спасибо ${name}, мы скоро свяжемся с вами по ${contact} по поводу вашего проекта!`,
+                successBtn: "Вернуться", loading: "Loading scene..."
+            },
+            uk: {
+                welcome: "Ласкаво просимо на Lilivine.cc - Студія веб-розробки",
+                about: "Контакти: lilivine666@gmail.com\nМи спеціалізуємося на:\n- Розробці сайтів під ключ\n- Веб-додатках\n- Інтернет-магазинах\n- UI/UX дизайні",
+                nameQuestion: "Як мені до вас звертатися?",
+                namePlaceholder: "Ваше ім'я", nameSubmit: "Продовжити",
+                greeting: (name) => `Вітаю, ${name}!`,
+                orderQuestion: "Бажаєте оформити замовлення?",
+                yesOption: "Так, замовити", noOption: "Не зараз",
+                formTitle: "Деталі замовлення",
+                contactLabel: "Контакт (Telegram/WhatsApp/Email)",
+                budgetLabel: "Бюджет (в USD)",
+                detailsLabel: "Що саме вам потрібно? (макс 100 символів)",
+                detailsPlaceholder: "Опишіть ваш проект...",
+                cancelBtn: "Скасувати", submitBtn: "Відправити замовлення",
+                successTitle: "Замовлення успішне!",
+                successMessage: (name, contact) => `Дякуємо ${name}, ми скоро зв'яжемося з вами по ${contact} щодо вашого проекту!`,
+                successBtn: "Повернутися", loading: "Loading scene..."
+            }
+        };
+
+        const userLang = navigator.language || navigator.userLanguage;
+        let lang = userLang.startsWith('ru') ? 'ru' : userLang.startsWith('uk') ? 'uk' : 'en';
+        const content = languages[lang];
+        let userName = "", currentDialog = 0, isTyping = false, isDragging = false;
+        let lastX = 0, lastY = 0, rotationY = 0, rotationX = 0, targetY = 0, targetX = 0;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const dialogs = [
+            { text: content.welcome, next: true },
+            { text: content.about, next: true },
+            { text: content.nameQuestion, input: true }
+        ];
+        const afterNameDialogs = [
+            { text: () => content.greeting(userName), next: true },
+            { text: content.orderQuestion, options: [
+                { text: content.yesOption, action: "order" },
+                { text: content.noOption, action: "close" }
+            ]}
+        ];
+        let currentDialogSet = dialogs;
+
+        function init() {
+            document.getElementById('name-input').placeholder = content.namePlaceholder;
+            document.getElementById('name-submit-btn').textContent = content.nameSubmit;
+            document.getElementById('form-title').textContent = content.formTitle;
+            document.getElementById('contact-label').textContent = content.contactLabel;
+            document.getElementById('budget-label').textContent = content.budgetLabel;
+            document.getElementById('details-label').textContent = content.detailsLabel;
+            document.getElementById('details-input').placeholder = content.detailsPlaceholder;
+            document.getElementById('cancel-btn').textContent = content.cancelBtn;
+            document.getElementById('submit-btn').textContent = content.submitBtn;
+            document.getElementById('success-title').textContent = content.successTitle;
+            document.getElementById('success-btn').textContent = content.successBtn;
+            
+            // Фикс для мобильных браузеров (адресная строка)
+            const setAppHeight = () => {
+                document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`);
+            };
+            window.addEventListener('resize', setAppHeight);
+            setAppHeight();
+            
+            window.addEventListener('load', () => setTimeout(() => {
+                document.getElementById('loading-indicator').style.display = 'none';
+                document.getElementById('world').style.opacity = '1';
+                showDialog(0);
+                
+                // Фикс для Safari (позиционирование элементов)
+                setTimeout(() => {
+                    const dialog = document.getElementById('dialog-container');
+                    dialog.style.top = '50%';
+                    dialog.style.left = '50%';
+                }, 100);
+            }, 500));
+            
+            setupEventListeners();
+            animateCamera();
+        }
+        
+        function setupEventListeners() {
+            document.getElementById('next-btn').addEventListener('click', nextDialog);
+            document.getElementById('cancel-btn').addEventListener('click', () => {
+                hideOrderForm();
+                document.getElementById('dialog-container').style.display = 'block';
+                document.getElementById('dialog-container').style.opacity = '1';
+                currentDialogSet = afterNameDialogs;
+                showDialog(0);
+            });
+            document.getElementById('submit-btn').addEventListener('click', submitOrderForm);
+            document.getElementById('success-btn').addEventListener('click', resetExperience);
+            document.getElementById('name-submit-btn').addEventListener('click', submitName);
+            document.getElementById('name-input').addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), document.getElementById('name-submit-btn').click()));
+            document.getElementById('details-input').addEventListener('input', (e) => e.target.value.length > 100 && (e.target.value = e.target.value.substring(0, 100)));
+            
+            const uiElements = ['dialog-container','form-container','success-container'].map(id => document.getElementById(id));
+            uiElements.forEach(el => {
+                el.addEventListener('mouseenter', () => isDragging = false);
+                el.addEventListener('mousedown', e => e.stopPropagation());
+                el.addEventListener('touchstart', e => e.stopPropagation());
+            });
+            
+            if (isMobile) {
+                document.addEventListener('touchstart', handleStart, { passive: false });
+                document.addEventListener('touchmove', handleMove, { passive: false });
+                document.addEventListener('touchend', () => isDragging = false);
+            } else {
+                document.addEventListener('mousedown', (e) => { 
+                    if (e.button === 0 && !e.target.closest('.dialog-container, .form-container, .success-container, .btn, .next-arrow, .form-btn')) { 
+                        isDragging = true; 
+                        lastX = e.clientX; 
+                        lastY = e.clientY; 
+                    } 
+                });
+                document.addEventListener('mousemove', handleMove);
+                document.addEventListener('mouseup', () => isDragging = false);
+                document.addEventListener('mouseleave', () => isDragging = false);
+            }
+        }
+        
+        function handleStart(e) {
+            const touch = e.touches[0];
+            const element = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (!element.closest('.dialog-container, .form-container, .success-container, .btn, .next-arrow, .form-btn')) {
+                isDragging = true;
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+                e.preventDefault();
+            }
+        }
+        
+        function handleMove(e) {
+            if (!isDragging) return;
+            const clientX = isMobile ? e.touches[0].clientX : e.clientX;
+            const clientY = isMobile ? e.touches[0].clientY : e.clientY;
+            const deltaX = clientX - lastX, deltaY = clientY - lastY;
+            lastX = clientX; lastY = clientY;
+            targetY = Math.min(Math.max(targetY + deltaX * 0.2, -40), 40);
+            targetX = Math.min(Math.max(targetX + deltaY * 0.1, -10), 10);
+            isMobile && e.preventDefault();
+        }
+        
+        function animateCamera() {
+            if (!isDragging) {
+                targetY *= 0.95; targetX *= 0.95;
+                if (Math.abs(targetY) < 0.1) targetY = 0;
+                if (Math.abs(targetX) < 0.1) targetX = 0;
+            }
+            
+            rotationY += (targetY - rotationY) * 0.1;
+            rotationX += (targetX - rotationX) * 0.1;
+            
+            const world = document.getElementById('world');
+            world.style.transform = `rotateX(${rotationX}deg) rotateY(${rotationY}deg)`;
+            
+            const offsetX = rotationY * 0.5, offsetY = rotationX * 0.5;
+            const rotate = `rotateY(${-rotationY * 0.2}deg) rotateX(${rotationX * 0.2}deg)`;
+            
+            requestAnimationFrame(() => {
+                const dialog = document.getElementById('dialog-container');
+                dialog.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 0) ${rotate}`;
+                
+                const formBox = document.getElementById('form-container');
+                if (formBox.style.display === 'block') {
+                    formBox.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 100px) ${rotate}`;
+                }
+                
+                const successBox = document.getElementById('success-container');
+                if (successBox.style.display === 'block') {
+                    successBox.style.transform = `translate3d(calc(-50% + ${offsetX}px), calc(-50% + ${offsetY}px), 150px) ${rotate}`;
+                }
+            });
+            
+            requestAnimationFrame(animateCamera);
+        }
+        
+        function showDialog(index) {
+            if (isTyping) return;
+            currentDialog = index;
+            const dialog = currentDialogSet[index];
+            const dialogText = document.getElementById('dialog-text');
+            const options = document.getElementById('options-container');
+            const nextBtn = document.getElementById('next-btn');
+            const nameInput = document.getElementById('name-input-container');
+            dialogText.textContent = '';
+            options.innerHTML = '';
+            nameInput.style.display = 'none';
+            nextBtn.style.display = 'none';
+            isTyping = true;
+            let i = 0;
+            function typeWriter() {
+                if (i < (typeof dialog.text === 'function' ? dialog.text().length : dialog.text.length)) {
+                    dialogText.textContent = (typeof dialog.text === 'function' ? dialog.text() : dialog.text).substring(0, i+1);
+                    i++;
+                    setTimeout(typeWriter, 20);
+                } else {
+                    isTyping = false;
+                    if (dialog.input) {
+                        nameInput.style.display = 'block';
+                        document.getElementById('name-input').focus();
+                    } else if (dialog.options) {
+                        dialog.options.forEach(opt => {
+                            const btn = document.createElement('button');
+                            btn.className = 'btn';
+                            btn.textContent = opt.text;
+                            btn.addEventListener('click', () => handleOption(opt.action));
+                            options.appendChild(btn);
+                        });
+                    } else if (dialog.next) nextBtn.style.display = 'block';
+                }
+            }
+            typeWriter();
+        }
+        
+        function nextDialog() {
+            if (isTyping) return;
+            if (currentDialog < currentDialogSet.length - 1) showDialog(currentDialog + 1);
+            else { currentDialogSet = dialogs; showDialog(0); }
+        }
+        
+        function handleOption(action) {
+            if (action === 'order') showOrderForm();
+            else if (action === 'close') {
+                hideOrderForm();
+                currentDialogSet = dialogs;
+                currentDialog = 0;
+                showDialog(0);
+            }
+        }
+        
+        function submitName() {
+            const nameInput = document.getElementById('name-input');
+            if (nameInput.value.trim() === '') {
+                alert(lang === 'ru' ? 'Пожалуйста, введите ваше имя' : lang === 'uk' ? 'Будь ласка, введіть ваше ім\'я' : 'Please enter your name');
+                return;
+            }
+            userName = nameInput.value.trim();
+            nameInput.value = '';
+            document.getElementById('name-input-container').style.display = 'none';
+            currentDialogSet = afterNameDialogs;
+            showDialog(0);
+        }
+        
+        function showOrderForm() {
+            const dialogBox = document.getElementById('dialog-container');
+            const formBox = document.getElementById('form-container');
+            dialogBox.style.opacity = '0';
+            setTimeout(() => {
+                dialogBox.style.display = 'none';
+                formBox.style.display = 'block';
+                setTimeout(() => formBox.style.opacity = '1', 10);
+            }, 300);
+        }
+        
+        function hideOrderForm() {
+            const formBox = document.getElementById('form-container');
+            formBox.style.opacity = '0';
+            setTimeout(() => formBox.style.display = 'none', 300);
+        }
+        
+        function submitOrderForm() {
+            const contact = document.getElementById('contact-input').value.trim();
+            const budget = document.getElementById('budget-input').value.trim();
+            const details = document.getElementById('details-input').value.trim();
+            
+            if (!contact || !budget || !details) {
+                alert(lang === 'ru' ? 'Пожалуйста, заполните все поля' : 
+                      lang === 'uk' ? 'Будь ласка, заповніть всі поля' : 
+                      'Please fill all fields');
+                return;
+            }
+
+            // Показываем индикатор загрузки
+            document.getElementById('loading-indicator').style.display = 'flex';
+            
+            // Отправка данных на сервер
+            fetch('/telegram-webhook', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: userName,
+                    contact_info: contact,
+                    price: budget,
+                    details: details
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading-indicator').style.display = 'none';
+                if (data.success) {
+                    const formBox = document.getElementById('form-container');
+                    const successBox = document.getElementById('success-container');
+                    const successMessage = document.getElementById('success-message');
+                    successMessage.textContent = content.successMessage(userName, contact);
+                    formBox.style.opacity = '0';
+                    setTimeout(() => {
+                        formBox.style.display = 'none';
+                        successBox.style.display = 'block';
+                        setTimeout(() => successBox.style.opacity = '1', 10);
+                    }, 300);
+                } else {
+                    alert(data.message || 'Error submitting order');
+                }
+            })
+            .catch(error => {
+                document.getElementById('loading-indicator').style.display = 'none';
+                alert(lang === 'ru' ? 'Ошибка при отправке заказа' : 
+                      lang === 'uk' ? 'Помилка при відправленні замовлення' : 
+                      'Error submitting order');
+                console.error('Error:', error);
+            });
+        }
+        
+        function resetExperience() {
+            const dialogBox = document.getElementById('dialog-container');
+            const successBox = document.getElementById('success-container');
+            document.getElementById('contact-input').value = '';
+            document.getElementById('budget-input').value = '';
+            document.getElementById('details-input').value = '';
+            successBox.style.opacity = '0';
+            setTimeout(() => {
+                successBox.style.display = 'none';
+                dialogBox.style.display = 'block';
+                setTimeout(() => dialogBox.style.opacity = '1', 10);
+                currentDialogSet = afterNameDialogs;
+                showDialog(0);
+            }, 300);
+        }
+        
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
