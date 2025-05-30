@@ -6,7 +6,16 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiting - максимум 2 запроса в 30 минут
+// Проверка на наличие необходимых переменных
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.error('❌ TELEGRAM_BOT_TOKEN и/или TELEGRAM_CHAT_ID не заданы в .env');
+    process.exit(1);
+}
+
+// Rate limiting
 const limiter = rateLimit({
     windowMs: 30 * 60 * 1000, // 30 минут
     max: 2,
@@ -23,11 +32,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
-// Telegram config
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-
-// Отправка в Telegram
+// Функция отправки в Telegram
 async function sendToTelegram(text) {
     try {
         const response = await axios.post(
@@ -40,17 +45,17 @@ async function sendToTelegram(text) {
         );
         return response.data;
     } catch (error) {
-        console.error('Telegram API error:', error.response?.data || error.message);
-        throw error;
+        console.error('❌ Telegram API error:', error.response?.data || error.message);
+        throw new Error('Failed to send message to Telegram');
     }
 }
 
-// Обработчик формы с ограничением запросов
+// Обработка формы
 app.post('/telegram-webhook', limiter, async (req, res) => {
     try {
         const { name, contact_info, price, details } = req.body;
 
-        // Валидация данных
+        // Валидация
         if (!name || !contact_info || !price || !details) {
             return res.status(400).json({
                 success: false,
@@ -58,8 +63,7 @@ app.post('/telegram-webhook', limiter, async (req, res) => {
             });
         }
 
-        // Проверка бюджета (число)
-        if (isNaN(price) {
+        if (isNaN(price)) {
             return res.status(400).json({
                 success: false,
                 message: 'Budget must be a number'
@@ -67,36 +71,36 @@ app.post('/telegram-webhook', limiter, async (req, res) => {
         }
 
         const message = `
-<b>New order from website!</b>
+<b>📨 Новый заказ с сайта</b>
 
-<b>Name:</b> ${name}
-<b>Contact Info:</b> ${contact_info}
-<b>Budget:</b> $${price}
+<b>Имя:</b> ${name}
+<b>Контакт:</b> ${contact_info}
+<b>Бюджет:</b> $${price}
 
-<b>Project details:</b>
+<b>Описание проекта:</b>
 ${details}
 
-<b>Date:</b> ${new Date().toLocaleString()}
-<b>IP:</b> ${req.ip}
+<b>Дата:</b> ${new Date().toLocaleString()}
+<b>IP:</b> ${req.headers['x-forwarded-for'] || req.socket.remoteAddress}
         `;
 
         await sendToTelegram(message);
 
-        res.json({ 
+        res.json({
             success: true,
             message: '✅ Your order has been received! Please wait up to 24 hours for us to contact you.'
         });
 
     } catch (error) {
-        console.error('Form processing error:', error);
+        console.error('❌ Form processing error:', error);
         res.status(500).json({
             success: false,
-            message: error.message || 'Error processing your order'
+            message: 'Server error. Try again later.'
         });
     }
 });
 
-// Старт сервера
+// Запуск сервера
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`✅ Server running on port ${PORT}`);
 });
