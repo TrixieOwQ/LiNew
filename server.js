@@ -2,27 +2,25 @@ require('dotenv').config();
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_CHAT_ID = process.env.TELEGRAM_ADMIN_CHAT_ID;
-const DATA_FILE = 'data.json';
-
-if (!TELEGRAM_TOKEN || !ADMIN_CHAT_ID) {
-  console.error('❌ TELEGRAM_BOT_TOKEN и TELEGRAM_ADMIN_CHAT_ID должны быть заданы в .env');
+if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_ADMIN_CHAT_ID) {
+  console.error('❌ Отсутствуют переменные окружения');
   process.exit(1);
 }
 
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: true });
 
 bot.on('polling_error', (error) => {
-  console.error(`‼️ Polling error: ${error.code} - ${error.message}`);
+  console.error(`‼️ Ошибка polling: ${error.code} - ${error.message}`);
 });
 
 let products = [];
 let orders = [];
+const DATA_FILE = 'data.json';
 
 function loadData() {
   try {
@@ -52,11 +50,8 @@ app.use(express.static('public'));
 
 app.get('/api/products', (req, res) => {
   const availableProducts = products
-    .filter(p => p.sizes.some(s => s.quantity > 0))
-    .map(p => ({
-      ...p,
-      available: p.sizes.some(s => s.quantity > 0)
-    }));
+    .filter(p => p.quantity > 0)
+    .map(p => ({ ...p, available: p.quantity > 0 }));
   res.json(availableProducts);
 });
 
@@ -67,45 +62,33 @@ app.get('/api/photo/:fileId', async (req, res) => {
     const response = await axios.get(fileUrl, { responseType: 'stream' });
     response.data.pipe(res);
   } catch (error) {
-    console.error('Error fetching photo:', error);
-    res.status(404).send('Фото не знайдено');
+    res.status(404).send('Фото не найдено');
   }
 });
 
 app.post('/api/order', (req, res) => {
   const { name, contact, items } = req.body;
-
+  
   let validItems = [];  
   let error = null;  
   
   items.forEach(item => {  
     const product = products.find(p => p.id === item.id);  
-    if (!product) {  
-      error = `Товар ${item.title} більше недоступний`;  
-    } else {
-      const sizeObj = product.sizes.find(s => s.size === item.size);
-      if (!sizeObj) {
-        error = `Товар ${product.title} не має розміру ${item.size}`;
-      } else if (sizeObj.quantity < item.qty) {  
-        error = `Недостатня кількість товару: ${product.title} (розмір: ${item.size}, залишилось: ${sizeObj.quantity})`;  
-      } else {  
-        validItems.push({
-          ...item,
-          sizeObj
-        });  
-      }
-    }  
+    if (!product) error = `Товар ${item.title} недоступен`;  
+    else if (product.quantity < item.qty) error = `Недостаточно товара: ${product.title}`;  
+    else validItems.push(item);  
   });  
   
   if (error || validItems.length === 0) {  
     return res.status(400).json({   
       success: false,  
-      message: error || 'Немає доступних товарів для замовлення'  
+      message: error || 'Нет доступных товаров'  
     });  
   }  
   
   validItems.forEach(item => {  
-    item.sizeObj.quantity -= item.qty;
+    const product = products.find(p => p.id === item.id);  
+    product.quantity -= item.qty;  
   });  
   
   const newOrder = {  
@@ -113,30 +96,34 @@ app.post('/api/order', (req, res) => {
     date: new Date().toISOString(),  
     name,  
     contact,  
-    items: validItems.map(item => ({ id: item.id, title: item.title, size: item.size, qty: item.qty }))  
+    items: validItems  
   };  
   
   orders.push(newOrder);  
   saveData();  
   
-  let message = `📦 *НОВЕ ЗАМОВЛЕННЯ!* #${newOrder.id}\n\n`;  
-  message += `👤 *Ім'я:* ${name}\n`;  
-  message += `📞 *Контакт:* ${contact}\n\n`;  
-  message += `🛒 *Товари:*\n`;  
+  let message = `📦 <b>НОВЫЙ ЗАКАЗ!</b> #${newOrder.id}\n\n`;  
+  message += `👤 <b>Имя:</b> ${name}\n`;  
+  message += `📞 <b>Контакт:</b> ${contact}\n\n`;  
+  message += `🛒 <b>Товары:</b>\n`;  
   
   validItems.forEach(item => {  
     const product = products.find(p => p.id === item.id);  
     message += `- ${product.title} (${item.size})\n`;  
-    message += `  Ціна: ₴${product.price} x ${item.qty}\n`;  
-    message += `  Загалом: ₴${(product.price * item.qty).toFixed(2)}\n`;  
+    message += `  Цена: ₴${product.price} x ${item.qty}\n`;  
+    message += `  Итого: ₴${(product.price * item.qty).toFixed(2)}\n`;  
   });  
   
-  const total = validItems.reduce((sum, item) => sum + (product.price * item.qty), 0);  
-  message += `\n💵 *Сума замовлення:* ₴${total.toFixed(2)}\n`;  
-  message += `⏰ *Дата:* ${new Date().toLocaleString('uk-UA')}`;  
+  const total = validItems.reduce((sum, item) => {  
+    const product = products.find(p => p.id === item.id);  
+    return sum + (product.price * item.qty);  
+  }, 0);  
   
-  bot.sendMessage(ADMIN_CHAT_ID, message, { parse_mode: 'Markdown' })  
-    .catch(err => console.error('❌ Помилка відправки в Telegram:', err));  
+  message += `\n💵 <b>Сумма заказа:</b> ₴${total.toFixed(2)}\n`;  
+  message += `⏰ <b>Дата:</b> ${new Date().toLocaleString('uk-UA')}`;  
+  
+  bot.sendMessage(process.env.TELEGRAM_ADMIN_CHAT_ID, message, { parse_mode: 'HTML' })  
+    .catch(err => console.error('❌ Ошибка отправки:', err));  
   
   res.json({ success: true });
 });
@@ -149,13 +136,13 @@ const STATE = {
   ADDING_DESC: 'ADDING_DESC',
   ADDING_PRICE: 'ADDING_PRICE',
   ADDING_SIZES: 'ADDING_SIZES',
-  ADDING_QUANTITIES: 'ADDING_QUANTITIES',
+  ADDING_QUANTITY: 'ADDING_QUANTITY',
   ADDING_PHOTOS: 'ADDING_PHOTOS',
   EDITING_PRODUCT: 'EDITING_PRODUCT',
   EDITING_FIELD: 'EDITING_FIELD',
-  EDITING_PHOTOS: 'EDITING_PHOTOS',
   DELETING_PRODUCT: 'DELETING_PRODUCT',
-  MOVING_PRODUCT: 'MOVING_PRODUCT'
+  MOVING_PRODUCT: 'MOVING_PRODUCT',
+  EDITING_PHOTOS: 'EDITING_PHOTOS'
 };
 
 function resetState(chatId) {
@@ -166,41 +153,230 @@ function showMainMenu(chatId) {
   const menu = {
     reply_markup: {
       keyboard: [
-        ['➕ Додати товар', '📋 Список товарів'],
-        ['✏️ Редагувати товар', '❌ Видалити товар'],
-        ['📦 Замовлення', '🔄 Змінити порядок']
+        ['➕ Добавить товар', '📋 Список товаров'],
+        ['✏️ Редактировать товар', '❌ Удалить товар'],
+        ['📦 Заказы', '🔄 Изменить порядок']
       ],
       resize_keyboard: true
     }
   };
 
-  bot.sendMessage(chatId, '👋 Вітаю в панелі управління магазином!', menu);  
+  bot.sendMessage(chatId, '👋 <b>Добро пожаловать в панель управления!</b>', { parse_mode: 'HTML', ...menu });  
   resetState(chatId);
 }
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
-  if (chatId.toString() !== ADMIN_CHAT_ID) return;
+  if (chatId.toString() !== process.env.TELEGRAM_ADMIN_CHAT_ID) return;
   showMainMenu(chatId);
 });
 
 bot.onText(/\/cancel/, (msg) => {
   const chatId = msg.chat.id;
-  if (chatId.toString() !== ADMIN_CHAT_ID) return;
-  bot.sendMessage(chatId, '❌ Поточну дію скасовано');  
+  if (chatId.toString() !== process.env.TELEGRAM_ADMIN_CHAT_ID) return;
+  bot.sendMessage(chatId, '❌ Действие отменено');  
   showMainMenu(chatId);
 });
 
+function handleAddingPhotos(chatId, msg) {
+  const state = userStates[chatId];
+  
+  if (msg.photo) {
+    if (state.productData.photos.length >= 10) {
+      bot.sendMessage(chatId, '❌ <b>Достигнут лимит в 10 фото!</b>', { parse_mode: 'HTML' });
+      return;
+    }
+    
+    const photo = msg.photo[msg.photo.length - 1];
+    state.productData.photos.push(photo.file_id);
+    
+    const count = state.productData.photos.length;
+    const hearts = '💜'.repeat(count) + '🤍'.repeat(10-count);
+    
+    bot.sendMessage(
+      chatId, 
+      `🖼 <b>Добавлено фото:</b> ${count}/10\n${hearts}\nОтправьте еще фото или введите "<b>готово</b>"`, 
+      { parse_mode: 'HTML' }
+    );
+  }
+  else if (msg.text && msg.text.toLowerCase() === 'готово') {
+    if (state.productData.photos.length === 0) {
+      bot.sendMessage(chatId, '❌ <b>Добавьте хотя бы одно фото!</b>', { parse_mode: 'HTML' });
+      return;
+    }
+    
+    const newProduct = {  
+      id: Date.now(),  
+      ...state.productData  
+    };  
+      
+    products.push(newProduct);  
+    saveData();  
+      
+    bot.sendMessage(chatId, `🎉 <b>Товар "${newProduct.title}" успешно добавлен!</b>`, { parse_mode: 'HTML' });  
+    showMainMenu(chatId);
+  }
+  else {
+    bot.sendMessage(chatId, '❌ Отправьте фото или введите "<b>готово</b>"', { parse_mode: 'HTML' });
+  }
+}
+
+function handleEditingPhotos(chatId, msg) {
+  const state = userStates[chatId];
+  
+  if (msg.photo) {
+    if (state.photos.length >= 10) {
+      bot.sendMessage(chatId, '❌ <b>Достигнут лимит в 10 фото!</b>', { parse_mode: 'HTML' });
+      return;
+    }
+    
+    const photo = msg.photo[msg.photo.length - 1];
+    state.photos.push(photo.file_id);
+    
+    const count = state.photos.length;
+    const hearts = '💜'.repeat(count) + '🤍'.repeat(10-count);
+    
+    bot.sendMessage(
+      chatId, 
+      `📸 <b>Добавлено фото:</b> ${count}/10\n${hearts}\nОтправьте еще фото или введите "<b>сохранить</b>"`, 
+      { parse_mode: 'HTML' }
+    );
+  }
+  else if (msg.text && msg.text.toLowerCase() === 'сохранить') {
+    if (state.photos.length === 0) {
+      bot.sendMessage(chatId, '❌ <b>Добавьте хотя бы одно фото!</b>', { parse_mode: 'HTML' });
+      return;
+    }
+    
+    const product = state.editingProduct;
+    product.photos = state.photos;
+    saveData();
+    
+    bot.sendMessage(chatId, '✅ <b>Фото товара обновлены!</b>', { parse_mode: 'HTML' });
+    
+    userStates[chatId].state = STATE.EDITING_FIELD;
+    delete userStates[chatId].photos;
+    
+    const menu = {  
+      reply_markup: {  
+        keyboard: [  
+          ['✏️ Название', '✏️ Описание'],  
+          ['✏️ Цена', '✏️ Размеры'],  
+          ['✏️ Количество', '✏️ Фото'],  
+          ['✅ Завершить редактирование']  
+        ],  
+        resize_keyboard: true  
+      }  
+    };
+    
+    bot.sendMessage(chatId, `✏️ <b>Редактирование:</b> ${product.title}`, { parse_mode: 'HTML', ...menu });  
+  }
+  else {
+    bot.sendMessage(chatId, '❌ Отправьте фото или введите "<b>сохранить</b>"', { parse_mode: 'HTML' });
+  }
+}
+
+function handleEditingField(chatId, msg) {
+  const state = userStates[chatId];
+  
+  if (msg.text === '✅ Завершить редактирование') {  
+    bot.sendMessage(chatId, '✅ <b>Редактирование завершено</b>', { parse_mode: 'HTML' });  
+    saveData();  
+    showMainMenu(chatId);  
+    return;  
+  }  
+  
+  if (!state.editingField) {
+    switch (msg.text) {  
+      case '✏️ Название':  
+        state.editingField = 'title';  
+        bot.sendMessage(chatId, '✏️ <b>Введите новое название:</b>', { parse_mode: 'HTML' });  
+        break;  
+      case '✏️ Описание':  
+        state.editingField = 'desc';  
+        bot.sendMessage(chatId, '📝 <b>Введите новое описание:</b>', { parse_mode: 'HTML' });  
+        break;  
+      case '✏️ Цена':  
+        state.editingField = 'price';  
+        bot.sendMessage(chatId, '💰 <b>Введите новую цену:</b>', { parse_mode: 'HTML' });  
+        break;  
+      case '✏️ Размеры':  
+        state.editingField = 'sizes';  
+        bot.sendMessage(chatId, '📏 <b>Введите размеры через запятую:</b>', { parse_mode: 'HTML' });  
+        break;  
+      case '✏️ Количество':  
+        state.editingField = 'quantity';  
+        bot.sendMessage(chatId, '🔢 <b>Введите новое количество:</b>', { parse_mode: 'HTML' });  
+        break;  
+      case '✏️ Фото':  
+        state.editingField = 'photos';  
+        userStates[chatId] = {
+          state: STATE.EDITING_PHOTOS,
+          editingProduct: state.editingProduct,
+          photos: []
+        };
+        bot.sendMessage(
+          chatId, 
+          '📸 <b>Отправьте новые фото (до 10)</b>\nВведите "<b>сохранить</b>" когда закончите', 
+          { parse_mode: 'HTML' }
+        );  
+        return;
+    }
+    return;
+  }
+  
+  const product = state.editingProduct;  
+    
+  switch (state.editingField) {  
+    case 'title':  
+      product.title = msg.text;  
+      bot.sendMessage(chatId, `✅ <b>Название изменено:</b>\n${msg.text}`, { parse_mode: 'HTML' });  
+      break;  
+    case 'desc':  
+      product.desc = msg.text;  
+      bot.sendMessage(chatId, '✅ <b>Описание обновлено!</b>', { parse_mode: 'HTML' });  
+      break;  
+    case 'price':  
+      const price = parseFloat(msg.text);  
+      if (isNaN(price)) {  
+        bot.sendMessage(chatId, '❌ <b>Неверный формат цены!</b>', { parse_mode: 'HTML' });  
+      } else {  
+        product.price = price;  
+        bot.sendMessage(chatId, `✅ <b>Цена изменена:</b> ₴${price}`, { parse_mode: 'HTML' });  
+      }  
+      break;  
+    case 'sizes':  
+      const sizes = msg.text.split(',').map(s => s.trim()).filter(s => s);  
+      if (sizes.length === 0) {  
+        bot.sendMessage(chatId, '❌ <b>Не указаны размеры!</b>', { parse_mode: 'HTML' });  
+      } else {  
+        product.sizes = sizes;  
+        bot.sendMessage(chatId, `✅ <b>Размеры обновлены:</b> ${sizes.join(', ')}`, { parse_mode: 'HTML' });  
+      }  
+      break;  
+    case 'quantity':  
+      const quantity = parseInt(msg.text);  
+      if (isNaN(quantity)) {  
+        bot.sendMessage(chatId, '❌ <b>Неверный формат количества!</b>', { parse_mode: 'HTML' });  
+      } else {  
+        product.quantity = quantity;  
+        bot.sendMessage(chatId, `✅ <b>Количество изменено:</b> ${quantity}`, { parse_mode: 'HTML' });  
+      }  
+      break;  
+  }  
+    
+  delete state.editingField;  
+  saveData();
+}
+
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
-  if (chatId.toString() !== ADMIN_CHAT_ID) return;
+  if (chatId.toString() !== process.env.TELEGRAM_ADMIN_CHAT_ID) return;
 
   const text = msg.text;  
   const state = userStates[chatId]?.state || STATE.IDLE;  
   
-  if (state !== STATE.IDLE && text && text.startsWith('/')) {  
-    return;  
-  }  
+  if (state !== STATE.IDLE && text && text.startsWith('/')) return;  
   
   switch (state) {  
     case STATE.IDLE:  
@@ -218,8 +394,8 @@ bot.on('message', (msg) => {
     case STATE.ADDING_SIZES:  
       handleAddingSizes(chatId, text);  
       break;  
-    case STATE.ADDING_QUANTITIES:  
-      handleAddingQuantities(chatId, text);  
+    case STATE.ADDING_QUANTITY:  
+      handleAddingQuantity(chatId, text);  
       break;  
     case STATE.ADDING_PHOTOS:  
       handleAddingPhotos(chatId, msg);  
@@ -244,84 +420,81 @@ bot.on('message', (msg) => {
 
 function handleIdleState(chatId, text) {
   switch (text) {
-    case '➕ Додати товар':
+    case '➕ Добавить товар':
       userStates[chatId] = {
         state: STATE.ADDING_TITLE,
-        productData: {}
+        productData: { photos: [] }
       };
-      bot.sendMessage(chatId, '📝 Надішліть назву товару:');
+      bot.sendMessage(chatId, '📝 <b>Введите название товара:</b>', { parse_mode: 'HTML' });
       break;
 
-    case '📋 Список товарів':  
+    case '📋 Список товаров':  
       if (products.length === 0) {  
-        bot.sendMessage(chatId, 'ℹ️ Товарів немає');  
+        bot.sendMessage(chatId, 'ℹ️ <b>Список товаров пуст</b>', { parse_mode: 'HTML' });  
       } else {  
-        let message = '📦 *Список товарів:*\n\n';  
+        let message = '📦 <b>Список товаров:</b>\n\n';  
         products.forEach((p, i) => {  
-          message += `${i+1}. ${p.title}\n`;  
-          message += `   Ціна: ₴${p.price}\n`;  
-          message += `   Розміри:\n`;  
-          p.sizes.forEach(s => {
-            message += `      ${s.size}: ${s.quantity} шт.\n`;
-          });
-          message += '\n';  
+          message += `${i+1}. <b>${p.title}</b>\n`;  
+          message += `   💰 Цена: <b>₴${p.price}</b>\n`;  
+          message += `   📦 Количество: <b>${p.quantity}</b>\n`;  
+          message += `   📏 Размеры: <b>${p.sizes.join(', ')}</b>\n\n`;  
         });  
-        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });  
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });  
       }  
       break;  
         
-    case '✏️ Редагувати товар':  
+    case '✏️ Редактировать товар':  
       if (products.length === 0) {  
-        bot.sendMessage(chatId, 'ℹ️ Товарів немає для редагування');  
+        bot.sendMessage(chatId, 'ℹ️ <b>Нет товаров для редактирования</b>', { parse_mode: 'HTML' });  
       } else {  
         userStates[chatId] = { state: STATE.EDITING_PRODUCT };  
-        let message = '📋 Виберіть товар для редагування:\n\n';  
+        let message = '✏️ <b>Выберите товар для редактирования:</b>\n\n';  
         products.forEach((p, i) => {  
           message += `${i+1}. ${p.title}\n`;  
         });  
-        bot.sendMessage(chatId, message);  
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });  
       }  
       break;  
         
-    case '❌ Видалити товар':  
+    case '❌ Удалить товар':  
       if (products.length === 0) {  
-        bot.sendMessage(chatId, 'ℹ️ Товарів немає для видалення');  
+        bot.sendMessage(chatId, 'ℹ️ <b>Нет товаров для удаления</b>', { parse_mode: 'HTML' });  
       } else {  
         userStates[chatId] = { state: STATE.DELETING_PRODUCT };  
-        let message = '🗑 Виберіть товар для видалення:\n\n';  
+        let message = '🗑 <b>Выберите товар для удаления:</b>\n\n';  
         products.forEach((p, i) => {  
           message += `${i+1}. ${p.title}\n`;  
         });  
-        bot.sendMessage(chatId, message);  
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });  
       }  
       break;  
         
-    case '📦 Замовлення':  
+    case '📦 Заказы':  
       if (orders.length === 0) {  
-        bot.sendMessage(chatId, 'ℹ️ Замовлень немає');  
+        bot.sendMessage(chatId, 'ℹ️ <b>Нет заказов</b>', { parse_mode: 'HTML' });  
       } else {  
-        let message = '📋 *Останні замовлення:*\n\n';  
+        let message = '📋 <b>Последние заказы:</b>\n\n';  
         orders.slice(-5).reverse().forEach(order => {  
-          message += `🆔 #${order.id}\n`;  
-          message += `👤 ${order.name}\n`;  
+          message += `🆔 <b>#${order.id}</b>\n`;  
+          message += `👤 <b>${order.name}</b>\n`;  
           message += `📞 ${order.contact}\n`;  
           message += `📅 ${new Date(order.date).toLocaleString('uk-UA')}\n`;  
-          message += `🛒 ${order.items.length} товар(ів)\n\n`;  
+          message += `🛒 <b>${order.items.length} товаров</b>\n\n`;  
         });  
-        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });  
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });  
       }  
       break;  
         
-    case '🔄 Змінити порядок':  
+    case '🔄 Изменить порядок':  
       if (products.length < 2) {  
-        bot.sendMessage(chatId, 'ℹ️ Потрібно щонайменше 2 товари для зміни порядку');  
+        bot.sendMessage(chatId, 'ℹ️ <b>Нужно минимум 2 товара</b>', { parse_mode: 'HTML' });  
       } else {  
         userStates[chatId] = { state: STATE.MOVING_PRODUCT };  
-        let message = '↕️ Виберіть товар для переміщення:\n\n';  
+        let message = '↕️ <b>Выберите товар для перемещения:</b>\n\n';  
         products.forEach((p, i) => {  
           message += `${i+1}. ${p.title}\n`;  
         });  
-        bot.sendMessage(chatId, message);  
+        bot.sendMessage(chatId, message, { parse_mode: 'HTML' });  
       }  
       break;  
   }
@@ -330,104 +503,53 @@ function handleIdleState(chatId, text) {
 function handleAddingTitle(chatId, text) {
   userStates[chatId].productData.title = text;
   userStates[chatId].state = STATE.ADDING_DESC;
-  bot.sendMessage(chatId, '📝 Надішліть опис товару:');
+  bot.sendMessage(chatId, '📝 <b>Введите описание товара:</b>', { parse_mode: 'HTML' });
 }
 
 function handleAddingDesc(chatId, text) {
   userStates[chatId].productData.desc = text;
   userStates[chatId].state = STATE.ADDING_PRICE;
-  bot.sendMessage(chatId, '💰 Надішліть ціну товару (тільки число):');
+  bot.sendMessage(chatId, '💰 <b>Введите цену товара (только число):</b>', { parse_mode: 'HTML' });
 }
 
 function handleAddingPrice(chatId, text) {
   const price = parseFloat(text);
   if (isNaN(price)) {
-    bot.sendMessage(chatId, '❌ Ціна повинна бути числом. Спробуйте ще раз:');
+    bot.sendMessage(chatId, '❌ <b>Цена должна быть числом!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });
     return;
   }
 
   userStates[chatId].productData.price = price;  
   userStates[chatId].state = STATE.ADDING_SIZES;  
-  bot.sendMessage(chatId, '📏 Надішліть розміри через кому (наприклад: S,M,L):');
+  bot.sendMessage(chatId, '📏 <b>Введите размеры через запятую (например: S,M,L):</b>', { parse_mode: 'HTML' });
 }
 
 function handleAddingSizes(chatId, text) {
   const sizes = text.split(',').map(s => s.trim()).filter(s => s);
   if (sizes.length === 0) {
-    bot.sendMessage(chatId, '❌ Введіть хоча б один розмір. Спробуйте ще раз:');
+    bot.sendMessage(chatId, '❌ <b>Введите хотя бы один размер!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });
     return;
   }
 
-  userStates[chatId].productData.sizes = sizes.map(size => ({ size, quantity: 0 }));
-  userStates[chatId].state = STATE.ADDING_QUANTITIES;
-  userStates[chatId].currentSizeIndex = 0;
-  askForQuantity(chatId);
+  userStates[chatId].productData.sizes = sizes;  
+  userStates[chatId].state = STATE.ADDING_QUANTITY;  
+  bot.sendMessage(chatId, '🔢 <b>Введите количество товара (от 1 до 100):</b>', { parse_mode: 'HTML' });
 }
 
-function askForQuantity(chatId) {
-  const state = userStates[chatId];
-  const currentSize = state.productData.sizes[state.currentSizeIndex].size;
-  bot.sendMessage(chatId, `🔢 Введіть кількість для розміру ${currentSize}:`);
-}
-
-function handleAddingQuantities(chatId, text) {
-  const state = userStates[chatId];
+function handleAddingQuantity(chatId, text) {
   const quantity = parseInt(text);
-
-  if (isNaN(quantity) || quantity < 0 || quantity > 1000) {
-    bot.sendMessage(chatId, '❌ Кількість повинна бути числом від 0 до 1000. Спробуйте ще раз:');
+  if (isNaN(quantity) || quantity < 1 || quantity > 100) {
+    bot.sendMessage(chatId, '❌ <b>Количество должно быть числом от 1 до 100!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });
     return;
   }
 
-  state.productData.sizes[state.currentSizeIndex].quantity = quantity;
-  state.currentSizeIndex++;
-
-  if (state.currentSizeIndex < state.productData.sizes.length) {
-    askForQuantity(chatId);
-  } else {
-    state.state = STATE.ADDING_PHOTOS;
-    state.productData.photos = [];
-    bot.sendMessage(chatId, '🖼 Надішліть фото товару (до 10 фото)');
-  }
-}
-
-function handleAddingPhotos(chatId, msg) {
-  const state = userStates[chatId];
-  
-  if (msg.photo) {
-    if (state.productData.photos.length >= 10) {
-      bot.sendMessage(chatId, '❌ Ви вже додали максимальну кількість фото (10)');
-      return;
-    }
-    
-    const photo = msg.photo[msg.photo.length - 1];
-    state.productData.photos.push(photo.file_id);
-    
-    bot.sendMessage(
-      chatId, 
-      `🖼 Додано фото ${state.productData.photos.length}/10. Надішліть ще фото або введіть "готово"`
-    );
-  }
-  else if (msg.text && msg.text.toLowerCase() === 'готово') {
-    if (state.productData.photos.length === 0) {
-      bot.sendMessage(chatId, '❌ Будь ласка, додайте хоча б одне фото');
-      return;
-    }
-    
-    const newProduct = {  
-      id: Date.now(),  
-      ...state.productData  
-    };  
-      
-    products.push(newProduct);  
-    saveData();  
-      
-    bot.sendMessage(chatId, `✅ Товар "${newProduct.title}" успішно додано!`);  
-    showMainMenu(chatId);
-  }
-  else {
-    bot.sendMessage(chatId, '❌ Будь ласка, надішліть фото або введіть "готово"');
-  }
+  userStates[chatId].productData.quantity = quantity;  
+  userStates[chatId].state = STATE.ADDING_PHOTOS;  
+  bot.sendMessage(
+    chatId, 
+    '🖼 <b>Отправьте фото товара (до 10 фото)</b>\nВведите "<b>готово</b>" когда закончите', 
+    { parse_mode: 'HTML' }
+  );
 }
 
 function handleEditingProduct(chatId, text) {
@@ -443,163 +565,18 @@ function handleEditingProduct(chatId, text) {
     const menu = {  
       reply_markup: {  
         keyboard: [  
-          ['✏️ Назва', '✏️ Опис'],  
-          ['✏️ Ціна', '✏️ Розміри'],  
-          ['✏️ Кількість', '✏️ Фото'],  
-          ['✅ Завершити редагування']  
+          ['✏️ Название', '✏️ Описание'],  
+          ['✏️ Цена', '✏️ Размеры'],  
+          ['✏️ Количество', '✏️ Фото'],  
+          ['✅ Завершить редактирование']  
         ],  
         resize_keyboard: true  
       }  
     };  
       
-    bot.sendMessage(chatId, `✏️ Ви обрали товар: ${product.title}\nЩо бажаєте змінити?`, menu);  
+    bot.sendMessage(chatId, `✏️ <b>Редактирование:</b> ${product.title}`, { parse_mode: 'HTML', ...menu });  
   } else {  
-    bot.sendMessage(chatId, '❌ Невірний номер товару. Спробуйте ще раз:');  
-  }
-}
-
-function handleEditingField(chatId, msg) {
-  const state = userStates[chatId];
-  
-  if (msg.text === '✅ Завершити редагування') {  
-    bot.sendMessage(chatId, '✅ Редагування завершено');  
-    saveData();  
-    showMainMenu(chatId);  
-    return;  
-  }  
-  
-  if (!state.editingField) {
-    switch (msg.text) {  
-      case '✏️ Назва':  
-        state.editingField = 'title';  
-        bot.sendMessage(chatId, 'Введіть нову назву товару:');  
-        break;  
-      case '✏️ Опис':  
-        state.editingField = 'desc';  
-        bot.sendMessage(chatId, 'Введіть новий опис товару:');  
-        break;  
-      case '✏️ Ціна':  
-        state.editingField = 'price';  
-        bot.sendMessage(chatId, 'Введіть нову ціну товару:');  
-        break;  
-      case '✏️ Розміри':  
-        state.editingField = 'sizes';  
-        bot.sendMessage(chatId, 'Введіть нові розміри через кому:');  
-        break;  
-      case '✏️ Кількість':  
-        state.editingField = 'quantity';  
-        bot.sendMessage(chatId, 'Введіть нову кількість для кожного розміру (у форматі "розмір: кількість, ..."):');
-        break;  
-      case '✏️ Фото':  
-        state.editingField = 'photos';  
-        state.state = STATE.EDITING_PHOTOS;
-        state.editingPhotos = [];
-        bot.sendMessage(chatId, '🖼 Надішліть нові фото товару (до 10 фото). Введіть "готово" коли закінчите.');
-        break;  
-    }
-    return;
-  }
-  
-  const product = state.editingProduct;  
-    
-  switch (state.editingField) {  
-    case 'title':  
-      product.title = msg.text;  
-      bot.sendMessage(chatId, `✅ Назву змінено на: ${msg.text}`);  
-      break;  
-    case 'desc':  
-      product.desc = msg.text;  
-      bot.sendMessage(chatId, `✅ Опис змінено`);  
-      break;  
-    case 'price':  
-      const price = parseFloat(msg.text);  
-      if (isNaN(price)) {  
-        bot.sendMessage(chatId, '❌ Невірний формат ціни');  
-      } else {  
-        product.price = price;  
-        bot.sendMessage(chatId, `✅ Ціну змінено на: ₴${price}`);  
-      }  
-      break;  
-    case 'sizes':  
-      const sizes = msg.text.split(',').map(s => s.trim()).filter(s => s);  
-      if (sizes.length === 0) {  
-        bot.sendMessage(chatId, '❌ Не вказано розміри');  
-      } else {  
-        product.sizes = sizes.map(size => ({ size, quantity: 0 }));
-        bot.sendMessage(chatId, `✅ Розміри змінено на: ${sizes.join(', ')}\nТепер встановіть кількість для кожного розміру`);
-      }  
-      break;  
-    case 'quantity':  
-      try {
-        const updates = msg.text.split(',').map(part => {
-          const [size, qtyStr] = part.split(':').map(s => s.trim());
-          const quantity = parseInt(qtyStr);
-          if (isNaN(quantity)) throw new Error();
-          return { size, quantity };
-        });
-        
-        updates.forEach(update => {
-          const sizeObj = product.sizes.find(s => s.size === update.size);
-          if (sizeObj) {
-            sizeObj.quantity = update.quantity;
-          }
-        });
-        
-        bot.sendMessage(chatId, `✅ Кількості оновлено`);
-      } catch (e) {
-        bot.sendMessage(chatId, '❌ Невірний формат. Використовуйте: "S: 10, M: 5, L: 3"');
-      }
-      break;
-  }  
-    
-  delete state.editingField;  
-  saveData();
-}
-
-function handleEditingPhotos(chatId, msg) {
-  const state = userStates[chatId];
-  
-  if (msg.photo) {
-    if (state.editingPhotos.length >= 10) {
-      bot.sendMessage(chatId, '❌ Ви вже додали максимальну кількість фото (10)');
-      return;
-    }
-    
-    const photo = msg.photo[msg.photo.length - 1];
-    state.editingPhotos.push(photo.file_id);
-    
-    bot.sendMessage(
-      chatId, 
-      `🖼 Додано фото ${state.editingPhotos.length}/10. Надішліть ще фото або введіть "готово"`
-    );
-  }
-  else if (msg.text && msg.text.toLowerCase() === 'готово') {
-    if (state.editingPhotos.length === 0) {
-      bot.sendMessage(chatId, '❌ Фото не змінено. Залишаються старі фото.');
-    } else {
-      state.editingProduct.photos = state.editingPhotos;
-      bot.sendMessage(chatId, `✅ Фото оновлено!`);
-    }
-    
-    state.state = STATE.EDITING_FIELD;
-    delete state.editingPhotos;
-    saveData();
-    
-    const menu = {  
-      reply_markup: {  
-        keyboard: [  
-          ['✏️ Назва', '✏️ Опис'],  
-          ['✏️ Ціна', '✏️ Розміри'],  
-          ['✏️ Кількість', '✏️ Фото'],  
-          ['✅ Завершити редагування']  
-        ],  
-        resize_keyboard: true  
-      }  
-    };
-    bot.sendMessage(chatId, 'Що бажаєте змінити?', menu);
-  }
-  else {
-    bot.sendMessage(chatId, '❌ Будь ласка, надішліть фото або введіть "готово"');
+    bot.sendMessage(chatId, '❌ <b>Неверный номер товара!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });  
   }
 }
 
@@ -609,10 +586,10 @@ function handleDeletingProduct(chatId, text) {
     const product = products[index];
     products.splice(index, 1);
     saveData();
-    bot.sendMessage(chatId, `✅ Товар "${product.title}" видалено`);
+    bot.sendMessage(chatId, `🗑️ <b>Товар удален:</b>\n"${product.title}"`, { parse_mode: 'HTML' });
     showMainMenu(chatId);
   } else {
-    bot.sendMessage(chatId, '❌ Невірний номер товару. Спробуйте ще раз:');
+    bot.sendMessage(chatId, '❌ <b>Неверный номер товара!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });
   }
 }
 
@@ -623,9 +600,9 @@ function handleMovingProduct(chatId, text) {
     const index = parseInt(text) - 1;  
     if (index >= 0 && index < products.length) {  
       state.selectedIndex = index;  
-      bot.sendMessage(chatId, '↕️ На яку позицію перемістити? Введіть номер:');  
+      bot.sendMessage(chatId, '↕️ <b>На какую позицию переместить?</b>\nВведите номер:', { parse_mode: 'HTML' });  
     } else {  
-      bot.sendMessage(chatId, '❌ Невірний номер товару. Спробуйте ще раз:');  
+      bot.sendMessage(chatId, '❌ <b>Неверный номер товара!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });  
     }  
   } else {  
     const newIndex = parseInt(text) - 1;  
@@ -634,15 +611,15 @@ function handleMovingProduct(chatId, text) {
       products.splice(state.selectedIndex, 1);  
       products.splice(newIndex, 0, product);  
       saveData();  
-      bot.sendMessage(chatId, `✅ Порядок товарів оновлено`);  
+      bot.sendMessage(chatId, '✅ <b>Порядок товаров обновлен!</b>', { parse_mode: 'HTML' });  
       showMainMenu(chatId);  
     } else {  
-      bot.sendMessage(chatId, '❌ Невірна позиція. Спробуйте ще раз:');  
+      bot.sendMessage(chatId, '❌ <b>Неверная позиция!</b>\nПопробуйте еще раз:', { parse_mode: 'HTML' });  
     }  
   }
 }
 
 app.listen(PORT, () => {
-  console.log(`🚀 Сервер запущено на порту ${PORT}`);
+  console.log(`🚀 Сервер запущен на порту ${PORT}`);
   loadData();
 });
